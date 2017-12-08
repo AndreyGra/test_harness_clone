@@ -8,6 +8,7 @@
 
 //Useful Namespaces
 using namespace std::chrono;
+//typedef SimpleBlobDetector::Params SBD::Parameters <- Typedef so that my function names aligned :)
 
 struct blobSettings
 {
@@ -26,11 +27,11 @@ struct BlobData
     int size;
 };
 
-//Custom way to check for format
-bool is_jpeg(const std::string& _file_name);
+//Custom way to check for .jpeg format
+bool                is_jpeg                 (const std::string& _file_name);
 
 //Converts text line to integer
-int LineToInt(std::ifstream& file);
+int                 LineToInt               (std::ifstream& file);
 
 //Interface to operate on blobsSettings
 void                initializeBlobSettings  (blobSettings& settings, std::string& directoryName);
@@ -50,7 +51,12 @@ void                processImage            (blobSettings &settings,
                                              std::string &file_name
                                             );
 
-
+//Function for image processing - contain openCV references
+//At this point in time openCV isn't defined in my Clion which means that I can't use any openCV features :(
+//void              ColourThreshold         (Mat& originalImage,blobSettings& settings)
+//SBD::Parameters   CreateParams            (blobSettings& settings)
+//void              openCVMethod            (SBD::Params &params, TimeKeeper& openCVKeeper)
+//void              BlobPixel               (Mat& binary, blobSettings& settings, TimeKeeper& customKeeper)
 
 
 
@@ -200,7 +206,7 @@ void outputSettings(blobSettings& settings) {
  */
 
 /*
- * cv::SimpleBlobDetector::Params CreateParams(blobSettings& settings)
+ * SBD::Parameters CreateParams(blobSettings& settings)
  * {
  *  int maximumArea = settings.maxArea;
  *  int minimumArea = settings.minArea;
