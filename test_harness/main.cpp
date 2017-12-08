@@ -5,10 +5,15 @@
 #include <dirent.h> // directory header
 #include <fstream>
 #include "TimeKeeper.h"
+#include "opencv2/opencv.hpp"
 
 //Useful Namespaces
 using namespace std::chrono;
-//typedef SimpleBlobDetector::Params SBD::Parameters <- Typedef so that my function names aligned :)
+using namespace cv;
+
+
+typedef SimpleBlobDetector::Params Parameters;
+
 
 struct blobSettings
 {
@@ -19,7 +24,7 @@ struct blobSettings
 
 };
 
-struct BlobData
+struct Blob
 {
     int x;
     int y;
@@ -27,8 +32,9 @@ struct BlobData
     int size;
 };
 
+
 //Custom way to check for .jpeg format
-bool                is_jpeg                 (const std::string& _file_name);
+bool                is_jpeg(const std::string& _file_name);
 
 //Converts text line to integer
 int                 LineToInt               (std::ifstream& file);
@@ -38,7 +44,7 @@ void                initializeBlobSettings  (blobSettings& settings, std::string
 void                outputSettings          (blobSettings& settings);
 
 //Interface to operate on data records
-std::ofstream       initializeRecord        (std::string &directory);
+std::ofstream       initializeRecord        (std::string &directory,int folder_no);
 void                writeToRecord           (TimeKeeper &OpenCV, TimeKeeper &Custom, std::ofstream &outputFileStream);
 void                closeRecord             (std::ofstream &outputFileStream);
 
@@ -53,10 +59,10 @@ void                processImage            (blobSettings &settings,
 
 //Function for image processing - contain openCV references
 //At this point in time openCV isn't defined in my Clion which means that I can't use any openCV features :(
-//void              ColourThreshold         (Mat& originalImage,blobSettings& settings)
-//SBD::Parameters   CreateParams            (blobSettings& settings)
-//void              openCVMethod            (SBD::Params &params, TimeKeeper& openCVKeeper)
-//void              BlobPixel               (Mat& binary, blobSettings& settings, TimeKeeper& customKeeper)
+void                ColourThreshold         (Mat& originalImage,blobSettings& settings);
+Parameters          CreateParams            (blobSettings& settings);
+void                openCVMethod            (Parameters &params, TimeKeeper& openCVKeeper,Mat& thresholded_binary);
+std::vector<Blob> BlobPixel(Mat &binary, blobSettings &settings);
 
 
 
@@ -65,14 +71,16 @@ void                processImage            (blobSettings &settings,
 
 int main (int argc, char** argv)
 {
+    if (argc != 2) { return -1; }
+
     auto custom_TimeKeeper = TimeKeeper();
     auto openCV_timekeeper = TimeKeeper();
 
     std::string::size_type sz;
-    //int number_of_folders = std::stoi(argv[1],&sz);
+
+    int number_of_folders = std::stoi(argv[1],&sz)+1;
 
     //This loop will iterate across all folders
-    int number_of_folders = 4;
 
     for (int i = 1; i < number_of_folders ; ++i) {
 
@@ -89,7 +97,7 @@ int main (int argc, char** argv)
         struct dirent *pent = nullptr;
 
         initializeBlobSettings(settings, directory);
-        std::ofstream record_file = initializeRecord(directory);
+        std::ofstream record_file = initializeRecord(directory,i);
 
         // Put this in to the folder containing images
 
@@ -99,7 +107,7 @@ int main (int argc, char** argv)
             exit (3);
         }                                                                                  // end if
 
-        while (pent = readdir (pdir) )                                                     // while there is still something in the directory to list
+        while ( (pent = readdir (pdir)) )                                                     // while there is still something in the directory to list
         {
             if (pent == nullptr)                                                           // if pent has not been initialised correctly
             {                                                                              // print an error message, and exit the program
@@ -126,6 +134,8 @@ int main (int argc, char** argv)
         closeRecord(record_file);
 
         closedir (pdir);                                                            // finally, let's close the directory
+
+        std::cout << "Folder no." << i << " has been completed!" << std::endl;
     }
 
     //Loop ends here
@@ -140,7 +150,7 @@ bool is_jpeg(const std::string& _file_name)
 
     if (_file_name.length() > 3) {
 
-        std::string _file_format = _file_name.substr((_file_name.length() - 5),(_file_name.length()));
+        std::string _file_format = _file_name.substr((_file_name.length() - 4),(_file_name.length()));
 
         if ((_file_format) == ".jpg" ||(_file_format) == ".jpg\n" ) {
             return true;
@@ -186,66 +196,64 @@ void outputSettings(blobSettings& settings) {
    std::cout << settings.maxArea << std::endl;
 }
 
-/*
- void ColourThreshold(Mat& originalImage,blobSettings& settings)
+
+void ColourThreshold(Mat& originalImage,blobSettings& settings)
  {
-    int lowH = settings.lowH;
-    int lowS = settings.lowS;
-    int lowV = settings.lowV;
+   int lowH = settings.lowH;
+   int lowS = settings.lowS;
+   int lowV = settings.lowV;
 
-    int highH = settings.highH;
-    int highH = settings.highS;
-    int highH = settings.highV;
+   int highH = settings.highH;
+   int highS = settings.highS;
+   int highV = settings.highV;
 
-	Mat imgHSV;
-	cvtColor(originalImage, imgHSV, COLOR_BGR2HSV);	//Convert to HSV spectrum. Better than RGB for comparing colour similarity
-	inRange(imgHSV, Scalar(lowH, lowS, lowV), Scalar(highH, highS, highV), originalImage); // Threshold the HSV image
-	dilate(originalImage, originalImage, getStructuringElement(MORPH_ELLIPSE, Size(7, 7))); //morphological closing (fill small holes in the foreground)
-	erode(originalImage, originalImage, getStructuringElement(MORPH_ELLIPSE, Size(7, 7)));
+   Mat imgHSV;
+   cvtColor(originalImage, imgHSV, COLOR_BGR2HSV);	//Convert to HSV spectrum. Better than RGB for comparing colour similarity
+   inRange(imgHSV, Scalar(lowH, lowS, lowV), Scalar(highH, highS, highV), originalImage); // Threshold the HSV image
+   dilate(originalImage, originalImage, getStructuringElement(MORPH_ELLIPSE, Size(7, 7))); //morphological closing (fill small holes in the foreground)
+   erode(originalImage, originalImage, getStructuringElement(MORPH_ELLIPSE, Size(7, 7)));
 }
- */
 
-/*
- * SBD::Parameters CreateParams(blobSettings& settings)
- * {
- *  int maximumArea = settings.maxArea;
- *  int minimumArea = settings.minArea;
- *
- *  cv::SimpleBlobDetector::Params params;
- *
-	params.filterByColor = false;
-	params.filterByConvexity = false;
-	params.filterByInertia = false;
-	params.filterByCircularity = false;
 
-	params.filterByArea = true;
-	params.minArea = settings.minArea;
-	params.maxArea = settings.maxArea;
 
-    return params;
- * }
- */
-
-/*
- * void openCVMethod(cv::SimpleBlobDetector::Params &params, TimeKeeper& openCVKeeper)
- * {
- *  Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
- *  std::vector<KeyPoint> keypoints;
- *
- *  openCVKeeper.start();
-	detector -> detect(im, keypoints);
-    openCVKeepr.endTimer();
- * }
- */
-
-/*
- * void BlobPixel(Mat& binary, blobSettings& settings, TimeKeeper& customKeeper)
+Parameters CreateParams(blobSettings& settings)
 {
-	vector<BlobData> blobsInImage;
+  //int maximumArea = settings.maxArea;
+  //int minimumArea = settings.minArea;
+
+  cv::SimpleBlobDetector::Params params;
+
+  params.filterByColor = false;
+  params.filterByConvexity = false;
+  params.filterByInertia = false;
+  params.filterByCircularity = false;
+
+  params.filterByArea = true;
+  params.minArea = settings.minArea;
+  params.maxArea = settings.maxArea;
+
+  return params;
+}
+
+
+void openCVMethod(cv::SimpleBlobDetector::Params &params, TimeKeeper& openCVKeeper, Mat& thresholded_binary)
+{
+  Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
+  std::vector<KeyPoint> keypoints;
+
+  openCVKeeper.start();
+
+  detector -> detect(thresholded_binary, keypoints);
+
+  openCVKeeper.endTimer();
+}
+
+std::vector<Blob> BlobPixel(Mat &binary, blobSettings &settings)
+{
+	std::vector<Blob> blobsInImage;
 	int minAreaModified = settings.minArea;
 	int maxAreaModified = settings.maxArea;
 
-    customKeeper.start();
 
 	int numBlobsInImage = 2; // starts at 2 because 0 and 1 are used already
 	for (int y = 0; y < binary.rows; y++) {
@@ -271,10 +279,10 @@ void outputSettings(blobSettings& settings) {
 
 			if (blobSize > minAreaModified && blobSize < maxAreaModified)	//Check if size of blob is correct
 			{
-				float desired_area = ((float)maxAreaModified - (float)minAreaModified) / 2.0f;
-				float A = -100 / (desired_area * desired_area);
+				//float desired_area = ((float)maxAreaModified - (float)minAreaModified) / 2.0f;
+				//float A = -100 / (desired_area * desired_area);
 
-				BlobData blob;
+				Blob blob;
 				blob.x = rect.x + rect.width / 2;
 				blob.y = rect.y + rect.height / 2;
 				blobsInImage.push_back(blob);
@@ -283,10 +291,8 @@ void outputSettings(blobSettings& settings) {
 			numBlobsInImage++;
 		}
 	}
-
-    customKeeper.endTimer();
+    return blobsInImage;
 }
- */
 
 void writeToRecord(TimeKeeper &OpenCV, TimeKeeper &Custom, std::ofstream &outputFileStream)
 {
@@ -297,11 +303,11 @@ void writeToRecord(TimeKeeper &OpenCV, TimeKeeper &Custom, std::ofstream &output
 
 }
 
-std::ofstream initializeRecord(std::string &directory)
+std::ofstream initializeRecord(std::string &directory,int folder_no)
 {
 
     std::ofstream myfile;
-    myfile.open(directory+"//"+"records.txt");//, std::ios::app | std::ios::trunc);
+    myfile.open(directory+"//"+"records"+"_"+std::to_string(folder_no)+".txt");
 
     return myfile;
 }
@@ -318,14 +324,19 @@ void processImage(blobSettings &settings,
                   std::string &file_name
                  )
 {
-    //Mat binary_image_openCV, binary_image_custom;
-    //binary_image_openCV = imread(directory+file_name,...);
-    //ColourThreshold(binary_image, settings)
+    Mat binary_image_openCV, binary_image_custom;
 
-    //binary_image_custom = binary_image_openCV;
+    binary_image_openCV = imread(directory+"//"+file_name,CV_LOAD_IMAGE_COLOR);
 
-    //blobPixel(binary_image_custom,settings,CustomKeeper)
+    ColourThreshold(binary_image_openCV, settings);
 
-    //cv::SimpleBlobDetector::Params parameters = CreateParams(settings);
-    //openCVMethod(parameters,OpenCVKeeper);
+    binary_image_custom = binary_image_openCV;
+
+    CustomKeeper.start();
+    std::vector<Blob> blobVector = BlobPixel(binary_image_custom, settings);
+    CustomKeeper.endTimer();
+
+    Parameters parameters = CreateParams(settings);
+
+    openCVMethod(parameters,OpenCVKeeper,binary_image_openCV);
 }
